@@ -9,6 +9,8 @@ from aiohttp import web
 
 from .apis import APIError
 
+# get 和 post 为修饰方法,主要是为对象加上'__method__' 和'__route__'属性
+# 为了把我们定义的url实际处理方法,以get请求或post请求的区分
 def get(path):
     '''
     Define decorator @get('/path')
