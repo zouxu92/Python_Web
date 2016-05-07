@@ -156,6 +156,8 @@ def init(loop):
     return srv
 '''
 
+
+
 async def init(loop):
     await orm.create_pool(loop=loop, host='127.0.0.1', port=3306, user='www', password='www', db='awesome')
     app = web.Application(loop=loop, middlewares=[
@@ -167,6 +169,8 @@ async def init(loop):
     srv = await loop.create_server(app.make_handler(), '127.0.0.1', 9000)
     logging.info('server started at http://127.0.0.1:9000...')
     return srv
+
+
 
 
 # 入口，固定写法
