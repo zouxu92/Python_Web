@@ -7,7 +7,7 @@ from urllib import parse
 
 from aiohttp import web
 
-from .apis import APIError
+from apis import APIError
 
 # get 和 post 为修饰方法,主要是为对象加上'__method__' 和'__route__'属性
 # 为了把我们定义的url实际处理方法,以get请求或post请求的区分
@@ -102,77 +102,77 @@ class RequestHandler(object):
         self._named_kw_args = get_name_kw_args(fn)
         self._required_kw_args = get_required_kw_args(fn)
 
-        async def __call__(self, request):
-            kw = None
-            # 如果处理函数需要传入特定key的参数或可变参数的话
-            if self._has_var_kw_arg or self._has_var_kw_arg or self._required_kw_args:
-                # 如果是post请求,则读请求的body
-                if request.method == "POST":
-                    # 如果request的头中没有content-type,则返回错误
-                    if not request.content_type:
-                        return web.HTTPBadRequest('Missing Content-Type.')
-                    # 字符串全部转换为小写
-                    ct = request.content_type.lower()
-                    # 如果是'application/json'类型
-                    if ct.startswith('application/json'):
-                        # 把request的body,按json的方式输出一个字典
-                        params = await request.json()
-                        # 解读出错或params不是一个字典,则返回错误描述
-                        if not isinstance(params, dict):
-                            return web.HTTPBadRequest('JSON body must be object.')
-                        # 保存这个params
-                        kw = params
-                    # 如果是'application/x-www-form-rulencoded',或 'multipart/form-data'，直接读出来并保存
-                    elif ct.startswith('application/x-www-form-urlencoden') or ct.startswith('multipart/form-data'):
-                        params = await request.post()
-                        kw = dict(**params)
-                    else:
-                        return web.HTTPBadRequest('Unsupported Content-Type: %s' % request.content_type)
-                # 如果是get请求,则读请求url字符串
-                if request.method == "GET":
-                    # 看url有没有参数,即? 后面的字符串
-                    qs = request.query_string
-                    if qs:
-                        # 如果有的话,则把产生以键值的放肆存起来赋值个kw
-                        kw = dict()
-                        for k, v in parse.parse_qs(qs, True).items():
-                            kw[k] = v[0]
-            # 如果kw为空的话,kw设置为request.mathch_info
-            if kw is None:
-                kw = dict(**request.match_info)
-            else:
-                # 如果kw有值的话
-                # 如果处理方式需要传入 **kw,且需要传入关键字参数
-                if not self._has_var_kw_arg and self._named_kw_args:
-                    # remove all unamed kw:
-                    copy = dict()
-                    # 从kw中筛选出url处理方法需要传入的参数对
-                    for name in self._named_kw_args:
-                        if name in kw:
-                            copy[name] = kw[name]
-                    kw = copy
-                # check named arg:
-                # 从match_info中筛选出url处理方法需要传入的参数对
-                for k, v in request.match_info.items():
-                    if k in kw:
-                        logging.warning("Duplictae arg name in anmed arg and kw args:%s" % k)
-                    kw[k] = v
-            # 如果参数需要传'request'参数,则把request实例出传入
-            if self._has_request_arg:
-                kw['request'] = request
+    async def __call__(self, request):
+        kw = None
+        # 如果处理函数需要传入特定key的参数或可变参数的话
+        if self._has_var_kw_arg or self._has_var_kw_arg or self._required_kw_args:
+            # 如果是post请求,则读请求的body
+            if request.method == "POST":
+                # 如果request的头中没有content-type,则返回错误
+                if not request.content_type:
+                    return web.HTTPBadRequest('Missing Content-Type.')
+                # 字符串全部转换为小写
+                ct = request.content_type.lower()
+                # 如果是'application/json'类型
+                if ct.startswith('application/json'):
+                    # 把request的body,按json的方式输出一个字典
+                    params = await request.json()
+                    # 解读出错或params不是一个字典,则返回错误描述
+                    if not isinstance(params, dict):
+                        return web.HTTPBadRequest('JSON body must be object.')
+                    # 保存这个params
+                    kw = params
+                # 如果是'application/x-www-form-rulencoded',或 'multipart/form-data'，直接读出来并保存
+                elif ct.startswith('application/x-www-form-urlencoden') or ct.startswith('multipart/form-data'):
+                    params = await request.post()
+                    kw = dict(**params)
+                else:
+                    return web.HTTPBadRequest('Unsupported Content-Type: %s' % request.content_type)
+            # 如果是get请求,则读请求url字符串
+            if request.method == "GET":
+                # 看url有没有参数,即? 后面的字符串
+                qs = request.query_string
+                if qs:
+                    # 如果有的话,则把产生以键值的放肆存起来赋值个kw
+                    kw = dict()
+                    for k, v in parse.parse_qs(qs, True).items():
+                        kw[k] = v[0]
+        # 如果kw为空的话,kw设置为request.mathch_info
+        if kw is None:
+            kw = dict(**request.match_info)
+        else:
+            # 如果kw有值的话
+            # 如果处理方式需要传入 **kw,且需要传入关键字参数
+            if not self._has_var_kw_arg and self._named_kw_args:
+                # remove all unamed kw:
+                copy = dict()
+                # 从kw中筛选出url处理方法需要传入的参数对
+                for name in self._named_kw_args:
+                    if name in kw:
+                        copy[name] = kw[name]
+                kw = copy
+            # check named arg:
+            # 从match_info中筛选出url处理方法需要传入的参数对
+            for k, v in request.match_info.items():
+                if k in kw:
+                    logging.warning("Duplictae arg name in anmed arg and kw args:%s" % k)
+                kw[k] = v
+        # 如果参数需要传'request'参数,则把request实例出传入
+        if self._has_request_arg:
+            kw['request'] = request
 
-            # 如果参数有默认为None的关键子参数,遍历一下kw,如果kw中没有这个key,抛错
-            if self._required_kw_args:
-                for name in self._required_kw_args:
-                    if not name in kw:
-                        return web.HTTPBadRequest('Missing argument: %s' % name)
-            logging.info('call with args: %s' % str(kw))
-            try:
-                # 对url进行处理
-                r = await self._func(**kw)
-                return r
-            except APIError as e:
-                return dict(error=e.error, data=e.data, message=e.message)
+        # 如果参数有默认为None的关键子参数,遍历一下kw,如果kw中没有这个key,抛错
+        if self._required_kw_args:
+            for name in self._required_kw_args:
+                if not name in kw:
+                    return web.HTTPBadRequest('Missing argument: %s' % name)
+        logging.info('call with args: %s' % str(kw))
+        try:
+            # 对url进行处理
+            r = await self._func(**kw)
+            return r
+        except APIError as e:
+            return dict(error=e.error, data=e.data, message=e.message)
 
 # 添加静态页面的路径
 def add_static(app):

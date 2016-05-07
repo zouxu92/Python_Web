@@ -18,7 +18,7 @@ async def create_pool(loop, **kw):
     __pool = await aiomysql.create_pool(
         # 前面几项为设置连接的属性
         host=kw.get('host', 'localhost'),     # 数据库服务器的位置,
-        port=kw.git('port', 3306),            # mysql的端口
+        port=kw.get('port', 3306),            # mysql的端口
         user=kw['user'],                      # 登录用户名
         password=kw['password'],              # 密码
         db=kw['db'],                          # 当前数据库名
@@ -27,7 +27,7 @@ async def create_pool(loop, **kw):
 
         # 下面三项是可选项
         maxsize=kw.get('maxsize', 10),  # 最大连接池大小,默认是10
-        minsize=kw.get('minsize, 1'),   # 最小连接池大小,默认是10
+        minsize=kw.get('minsize', 1),   # 最小连接池大小,默认是10
         loop=loop    # 设置消息循环
     )
 
@@ -42,7 +42,7 @@ async def select(sql, args, size=None):  # async协程
         async with conn.cursor(aiomysql.DictCursor) as cur:
         # sql语句的占位符为"?",mysql的占位符为"%s",因此需要进行替换
         # 若没有指定args,将使用默认的select语句(在Meatclass内定义的)进行查询
-            await cur.extcute(sql.replace('?', '%s'), args or ())
+            await cur.execute(sql.replace('?', '%s'), args or ())
         if size:
             rs = await cur.fetchmany(size)
         else:
