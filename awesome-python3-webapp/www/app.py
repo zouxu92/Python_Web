@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 # Web App 骨架，基于aiohttp的app.py
-import logging;logging.basicConfig(level=logging.INFO)
+import logging; logging.basicConfig(level=logging.INFO)
 
 import asyncio, os, json, time
 from datetime import datetime
 
 from aiohttp import web
 from jinja2 import Environment, FileSystemLoader
+
+from config import configs
 
 import orm
 from coroweb import add_routes, add_static
@@ -43,23 +45,27 @@ def init_jinja2(app, **kw):
     app['__templating__'] = env
 
 # 在正式处理之前打印日志
-async def logger_factory(app, handler):
-    async def logger(request):
+@asyncio.coroutine
+def logger_factory(app, handler):
+    @asyncio.coroutine
+    def logger(request):
         logging.info('Request: %s %s' % (request.method, request.path))
         # await asyncio.sleep(0.3)
-        return (await handler(request))
+        return (yield from handler(request))
     return logger
 
-async def data_factory(app, handler):
-    async def parse_data(request):
+@asyncio.coroutine
+def data_factory(app, handler):
+    @asyncio.coroutine
+    def parse_data(request):
         if request.method == "POST":
             if request.content_type.startswith('application/json'):
-                request.__data__ = await request.json()
+                request.__data__ = yield from request.json()
                 logging.info('request json: %s' % str(request.__data__))
             elif request.content_type.startswith('application/x-www-form-urlencoded'):
-                request.__data__ = await request.post()
+                request.__data__ = yield from request.post()
                 logging.info('request form: %s' % str(request.__data__))
-        return (await handler(request))
+        return (yield from handler(request))
     return parse_data
 
 
@@ -73,12 +79,13 @@ async def data_factory(app, handler):
 # 		RequestHandler目的就是从URL函数中分析其需要接收的参数，从request中获取必要的参数，调用URL函数,然后把结果返回给response_factory
 # 		response_factory在拿到经过处理后的对象，经过一系列对象类型和格式的判断，构造出正确web.Response对象，以正确的方式返回给客户端
 # 在这个过程中，我们只用关心我们的handler的处理就好了，其他的都走统一的通道，如果需要差异化处理，就在通道中选择适合的地方添加处理代码
-
-async def response_factory(app, handler):
-    async def response(request):
+@asyncio.coroutine
+def response_factory(app, handler):
+    @asyncio.coroutine
+    def response(request):
         logging.info("Response handler...")
         # 调用相应的Handler处理request
-        r = await handler(request)
+        r = yield from handler(request)
         # 如果响应结果为web.StreamResponse类,则直接把它作为相应返回
         if isinstance(r, web.StreamResponse):
             return r
@@ -112,8 +119,8 @@ async def response_factory(app, handler):
                 # 以html的形式返回
                 return resp
         # 响应结果为int
-        if isinstance(r, int) and r >= 100 and r < 600:
-            return web.Response( r)
+        if isinstance(r, int) and t >= 100 and t < 600:
+            return web.Response(t)
         # 如果响应结果为tuple且数量为2
         if isinstance(r, tuple) and len(r) == 2:
             t, m = r
@@ -157,16 +164,16 @@ def init(loop):
 '''
 
 
-
-async def init(loop):
-    await orm.create_pool(loop=loop, host='127.0.0.1', port=3306, user='www', password='www', db='awesome')
+@asyncio.coroutine
+def init(loop):
+    yield from orm.create_pool(loop=loop, host='127.0.0.1', port=3306, user='www', password='www', db='awesome')
     app = web.Application(loop=loop, middlewares=[
         logger_factory, response_factory
     ])
     init_jinja2(app, filters=dict(detetime=datetime_filter))
     add_routes(app, 'handlers')
     add_static(app)
-    srv = await loop.create_server(app.make_handler(), '127.0.0.1', 9000)
+    srv = yield from loop.create_server(app.make_handler(), '127.0.0.1', 9000)
     logging.info('server started at http://127.0.0.1:9000...')
     return srv
 

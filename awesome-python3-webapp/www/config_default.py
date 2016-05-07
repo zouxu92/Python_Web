@@ -8,14 +8,15 @@
 # 默认的配置文件应完全符合本地开发环境,这样,无需任何设置,就可以立即启动服务器
 
 configs = {
+    'debug': True,
     'db': {
         'host': '127.0.0.1',
         'port': 3306,
-        'user': 'www-data',
-        'password': 'www-data',
-        'database': 'awesome'
+        'user': 'www',
+        'password': 'www',
+        'db': 'awesome'
     },
     'session': {
-        'secret':'AwEsOnE'
+        'secret':'Awesome'
     }
 }

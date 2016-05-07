@@ -51,7 +51,7 @@ def get_required_kw_args(fn):
     for name, param in params.items():
         if param.kind == inspect.Parameter.KEYWORD_ONLY and param.default == inspect.Parameter.empty:
             args.append(name)
-        return tuple(args)
+        return tuple(args)      
 
 # 如果url处理函数需要传入关键字参数,回去这个key
 def get_name_kw_args(fn):
@@ -86,8 +86,8 @@ def has_request_arg(fn):
             found = True
             continue
         if found and (param.kind != inspect.Parameter.VAR_POSITIONAL and param.kind != inspect.Parameter.KEYWORD_ONLY and param.kind != inspect.Parameter.VAR_KEYWORD):
-            raise ValueError('request parameter must be the last named parameter in funtion: %s%s' %(fn.__name__, str(sig)))
-    return round
+            raise ValueError('request parameter must be the last named parameter in funtion: %s%s' % (fn.__name__, str(sig)))
+    return found
 
 # RequestHandler目的就是从URL函数中分析其需要接受的参数,从request中回去必要的参数调用URL函数
 class RequestHandler(object):
@@ -102,10 +102,11 @@ class RequestHandler(object):
         self._named_kw_args = get_name_kw_args(fn)
         self._required_kw_args = get_required_kw_args(fn)
 
-    async def __call__(self, request):
+    @asyncio.coroutine
+    def __call__(self, request):
         kw = None
         # 如果处理函数需要传入特定key的参数或可变参数的话
-        if self._has_var_kw_arg or self._has_var_kw_arg or self._required_kw_args:
+        if self._has_var_kw_arg or self._has_named_kw_args or self._required_kw_args:
             # 如果是post请求,则读请求的body
             if request.method == "POST":
                 # 如果request的头中没有content-type,则返回错误
@@ -116,15 +117,15 @@ class RequestHandler(object):
                 # 如果是'application/json'类型
                 if ct.startswith('application/json'):
                     # 把request的body,按json的方式输出一个字典
-                    params = await request.json()
+                    params = yield from request.json()
                     # 解读出错或params不是一个字典,则返回错误描述
                     if not isinstance(params, dict):
                         return web.HTTPBadRequest('JSON body must be object.')
                     # 保存这个params
                     kw = params
                 # 如果是'application/x-www-form-rulencoded',或 'multipart/form-data'，直接读出来并保存
-                elif ct.startswith('application/x-www-form-urlencoden') or ct.startswith('multipart/form-data'):
-                    params = await request.post()
+                elif ct.startswith('application/x-www-form-urlencoded') or ct.startswith('multipart/form-data'):
+                    params = yield from request.post()
                     kw = dict(**params)
                 else:
                     return web.HTTPBadRequest('Unsupported Content-Type: %s' % request.content_type)
@@ -155,7 +156,7 @@ class RequestHandler(object):
             # 从match_info中筛选出url处理方法需要传入的参数对
             for k, v in request.match_info.items():
                 if k in kw:
-                    logging.warning("Duplictae arg name in anmed arg and kw args:%s" % k)
+                    logging.warning("Duplictae arg name in anmed arg and kw args: %s" % k)
                 kw[k] = v
         # 如果参数需要传'request'参数,则把request实例出传入
         if self._has_request_arg:
@@ -169,7 +170,7 @@ class RequestHandler(object):
         logging.info('call with args: %s' % str(kw))
         try:
             # 对url进行处理
-            r = await self._func(**kw)
+            r = yield from self._func(**kw)
             return r
         except APIError as e:
             return dict(error=e.error, data=e.data, message=e.message)
@@ -178,7 +179,7 @@ class RequestHandler(object):
 def add_static(app):
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
     app.router.add_static('/static/', path)
-    logging.info('add static %s ==> %s' % ('/static', path))
+    logging.info('add static %s ==> %s' % ('/static/', path))
 
 def add_route(app, fn):
     # 获取'__method__'和'__route__'属性,如果有空则抛出异常
@@ -204,7 +205,6 @@ def add_routes(app, module_name):
     if n == (-1):
         mod = __import__(module_name, globals(), locals())
     else:
-
         name = module_name[n+1:]
         mod = getattr(__import__(module_name[:n], globals(), locals(), [name]), name)
     # 遍历mod的方法和属性,主要是找处理方法
