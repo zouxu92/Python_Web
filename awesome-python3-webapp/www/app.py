@@ -22,7 +22,7 @@ def init_jinja2(app, **kw):
         block_start_string = kw.get('block_start_string', '{%'),        # 运行代码的开始标示符
         block_end_string = kw.get('block_end_string', '%}'),            # 运行代码的结束标识符
         variable_start_string = kw.get('variable_start_string', '{{'),  # 变量的开始标示符
-        variable_end_string = kw.get('variavle_end_string', '}}'),      # 变量的结束标识符
+        variable_end_string = kw.get('variable_end_string', '}}'),      # 变量的结束标识符
         auto_reload = kw.get('auto_reload', True)           # Jinja2会在使用Template时检查模板文件的状态,如果模板有修改,则重新加载模板.如果对性能要求较高,可以将值设置False
     )
     # 从参数中获取path字段,即模板文件的位置
@@ -50,7 +50,7 @@ def logger_factory(app, handler):
     @asyncio.coroutine
     def logger(request):
         logging.info('Request: %s %s' % (request.method, request.path))
-        # await asyncio.sleep(0.3)
+        # yield from asyncio.sleep(0.3)
         return (yield from handler(request))
     return logger
 
@@ -59,9 +59,9 @@ def logger_factory(app, handler):
 def auth_factory(app, handler):
     @asyncio.coroutine
     def auth(request):
-        logging.info('check user: %s %s ' % (request.method, request.path))
+        logging.info('check user: %s %s' % (request.method, request.path))
         request.__user__ = None
-        cookie_str = request.cookie.get(COOKIE_NAME)
+        cookie_str = request.cookies.get(COOKIE_NAME)
         if cookie_str:
             user = yield from cookie2user(cookie_str)
             if user:
@@ -173,7 +173,7 @@ def init(loop):
     app = web.Application(loop=loop, middlewares=[
         logger_factory, auth_factory, response_factory
     ])
-    init_jinja2(app, filters=dict(detetime=datetime_filter))
+    init_jinja2(app, filters=dict(datetime=datetime_filter))
     add_routes(app, 'handlers')
     add_static(app)
     srv = yield from loop.create_server(app.make_handler(), '127.0.0.1', 9000)

@@ -49,6 +49,7 @@ def select(sql, args, size=None):  # async协程
             rs = yield from cur.fetchmany(size)
         else:
             rs = yield from cur.fetchall()
+        yield from cur.close()
         logging.info('rows returned: %s' % len(rs))
         return rs
 
@@ -62,7 +63,7 @@ def execute(sql, args, autocommit=True):
         try:
             # 此处打开的是一个普通游标
             cur = yield from conn.cursor()
-            yield from cur.extcute(sql.replace('?', '%s'), args)
+            yield from cur.execute(sql.replace('?', '%s'), args)
             affected = cur.rowcount # 增删改,返回影响的行数
             yield from cur.close()
             if not autocommit:
@@ -78,7 +79,7 @@ def create_args_string(num):
     L = []
     for n in range(num):
         L.append('?')
-    return ','.join(L)
+    return ', '.join(L)
 
 # 父域,可被其他继承
 class Field(object):
@@ -87,15 +88,15 @@ class Field(object):
     # default参数允许orm自己填入省缺值,因此具体的使用请看的具体的类怎么使用
     # 比如User有一个定义在StringField的id,default就用于存储用户的独立id
     # 再比如created_at的default就用于存储创建时间的浮点表示
-    def __init__(self, name, colume_type, primary_key, default):
+    def __init__(self, name, column_type, primary_key, default):
         self.name = name
-        self.colume_type = colume_type
+        self.column_type = column_type
         self.primary_key = primary_key
         self.default = default
 
     # 用于打印信息,依次为类名(域名),属性类型,属性名
     def __str__(self):
-        return '<%s, %s:%s> ' % (self.__class__.__name__, self.colume_type, self.name)
+        return '<%s, %s:%s> ' % (self.__class__.__name__, self.column_type, self.name)
 
 class StringField(Field): # string类型处理,调用父类方法初始化
 
@@ -110,7 +111,7 @@ class BooleanField(Field):
     def __init__(self, name=None, default=False):
         super().__init__(name, 'boolean', False, default)
 
-class IntegerFiled(Field):
+class IntegerField(Field):
 
     def __init__(self, name=None, primary_key=False, default=0):
         super().__init__(name, 'bigint', primary_key, default)
@@ -118,7 +119,7 @@ class IntegerFiled(Field):
 class FloatField(Field):
 
     def __init__(self, name=None, primary_key=False, default=0.0):
-        super().__init__(name, 'real', False, default)
+        super().__init__(name, 'real', primary_key, default)
 
 class TextField(Field):
 
@@ -143,7 +144,7 @@ class ModelMetaclass(type):
 
         # 获取表名,若没有定义__table__属性,将类名作为表名.此处注意 or 的用法
         tableName = attrs.get('__table__', None) or name
-        logging.info('found model: %s (table:%s' % (name, tableName))
+        logging.info(' found model: %s (table:%s)' % (name, tableName))
         # 获取所有的Field和主键名
         mappings = dict()   # 用字典来储存类属性与数据库表的列的映射关系
         fields = []         # 用于保存除主键外的属性
@@ -174,12 +175,12 @@ class ModelMetaclass(type):
         attrs['__fields__'] = fields            # 除主键以为的属性名
 
         # 构造默认的select,insert,update,delete语句,使用?做占位符
-        attrs['__select__'] = 'select `%s`, %s from `%s`' % (primaryKey, ','.join(escaped_fields), tableName)
+        attrs['__select__'] = 'select `%s`, %s from `%s`' % (primaryKey, ', '.join(escaped_fields), tableName)
         # 此处利用create_args_string生成若干个?占位
         # 插入数据库时,要指定表名
-        attrs['__insert__'] = 'insert into `%s` (%s, `%s`) values (%s)' %  (tableName, ','.join(escaped_fields), primaryKey, create_args_string(len(escaped_fields) + 1))
+        attrs['__insert__'] = 'insert into `%s` (%s, `%s`) values (%s)' %  (tableName, ', '.join(escaped_fields), primaryKey, create_args_string(len(escaped_fields) + 1))
         # 通过主键查找到记录并更新
-        attrs['__update__'] = 'update `%s` set %s where `%s`=?' % (tableName, ','.join(map(lambda f: '`%s=?'%(mappings.get(f).name or f), fields)), primaryKey)
+        attrs['__update__'] = 'update `%s` set %s where `%s`=?' % (tableName, ', '.join(map(lambda f: '`%s`=?'%(mappings.get(f).name or f), fields)), primaryKey)
         # 通过主键删除
         attrs['__delete__'] = 'delete from `%s` where `%s`=?' % (tableName, primaryKey)
         return type.__new__(cls, name, bases, attrs)
@@ -196,7 +197,7 @@ class Model(dict, metaclass=ModelMetaclass):
         try:
             return self[key]
         except KeyError:
-            raise AttributeError(r"'Model' object has no attribut  '%s'" % key)
+            raise AttributeError(r"'Model' object has no attribute  '%s'" % key)
 
     # 增加__setatrr__方法,是设置属性更方便,可通过"a.b=c"的形式
     def __setattr__(self, key, value):
@@ -217,10 +218,10 @@ class Model(dict, metaclass=ModelMetaclass):
                 # FloatFiled.default=time.time数,因此调用time.time函数返回当前时间
                 # 普通属性的StringField默认为None,因此还是返回None
                 value = field.default() if callable(field.default) else field.default
-                logging.debug('using dafault value for %s:%s' % (key, str(value)))
+                logging.debug('using default value for %s:%s' % (key, str(value)))
                 # 通过default取到值后再将其作用当前值
                 setattr(self, key, value)
-            return value
+        return value
 
     @classmethod  # 该装饰器将方法定义为类方法
     @asyncio.coroutine
@@ -234,7 +235,7 @@ class Model(dict, metaclass=ModelMetaclass):
             sql.append(where)
         if args is None:
             args = []
-        orderBy = kw.get('roderBy', None)
+        orderBy = kw.get('orderBy', None)
         # 接受同为where,此处orderBy通过关键字参数传入
         if orderBy:
             sql.append('order by')
@@ -291,7 +292,7 @@ class Model(dict, metaclass=ModelMetaclass):
     def update(self):
         # 像time.time,next_id之类的函数在插入的时候已经调用过了,没有其他需要实时更新的值,因此调用getValue
         args = list(map(self.getValue, self.__fields__))
-        args.append(self.getValue(self.__primary_k__))
+        args.append(self.getValue(self.__primary_key__))
         rows = yield from execute(self.__update__, args)
         if rows != 1:
             logging.warn('failed to update by primary key: affected rows: %s' % rows)
@@ -301,5 +302,5 @@ class Model(dict, metaclass=ModelMetaclass):
         args = [self.getValue(self.__primary_key__)]  # 取消主键做为参数
         rows = yield from execute(self.__delete__, args)   # 调用默认的Delete语句
         if rows != 1:
-            logging.warn('failed to remove by primary key: arrrected rows: %s' % rows)
+            logging.warn('failed to remove by primary key: affected rows: %s' % rows)
 
