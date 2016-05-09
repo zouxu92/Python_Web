@@ -12,7 +12,7 @@ from config import configs
 
 import orm
 from coroweb import add_routes, add_static
-
+from handlers import cookie2user, COOKIE_NAME
 
 def init_jinja2(app, **kw):
     logging.info('init jinja2...')
@@ -53,6 +53,24 @@ def logger_factory(app, handler):
         # await asyncio.sleep(0.3)
         return (yield from handler(request))
     return logger
+
+# 请求头处理cookie
+@asyncio.coroutine
+def auth_factory(app, handler):
+    @asyncio.coroutine
+    def auth(request):
+        logging.info('check user: %s %s ' % (request.method, request.path))
+        request.__user__ = None
+        cookie_str = request.cookie.get(COOKIE_NAME)
+        if cookie_str:
+            user = yield from cookie2user(cookie_str)
+            if user:
+                logging.info('set current user: %s' % user.email)
+                request.__user__ = user
+        if request.path.startswith('/manage/') and (request.__user__ is None or not request.__user__.admin):
+            return web.HTTPFound('/signin')
+        return (yield from handler(request))
+    return auth
 
 @asyncio.coroutine
 def data_factory(app, handler):
@@ -109,10 +127,11 @@ def response_factory(app, handler):
             template = r.get('__template__')
             # 如果没有,说明要返回json字符串,则包字典转换为json返回,对应的response类型设为json类型
             if template is None:
-                resp = web.Response(body=json.dumps(r, ensure_ascii=False, default=lambda o:o.__dict__).encode('utf-8'))
+                resp = web.Response(body=json.dumps(r, ensure_ascii=False, default=lambda o: o.__dict__).encode('utf-8'))
                 resp.content_type = 'application/json;charset=utf-8'
                 return resp
             else:
+                r['__user__'] = request.__user__
                 # 如果有key值,说明要套用jinja2的模板,'__template__'key对应的为模板网页所在的位置
                 resp = web.Response(body=app['__templating__'].get_template(template).render(**r).encode('utf-8'))
                 resp.content_type = 'text/html;charset=utf-8'
@@ -148,27 +167,11 @@ def datetime_filter(t):
     return u'%s年%s月%s日' % (dt.year, dt.month, dt.day)
 
 
-
-'''
-第4天更改
-def index(request):
-    return web.Response(body=b'<h1>Awesome</h1>')
-
 @asyncio.coroutine
 def init(loop):
-    app = web.Application(loop=loop)
-    app.router.add_route('GET', '/', index)
-    srv = yield from loop.create_server(app.make_handler(), '127.0.0.1', 9000)
-    logging.info('server started at http://127.0.0.1:9000...')
-    return srv
-'''
-
-
-@asyncio.coroutine
-def init(loop):
-    yield from orm.create_pool(loop=loop, host='127.0.0.1', port=3306, user='www', password='www', db='awesome')
+    yield from orm.create_pool(loop=loop, **configs.db)
     app = web.Application(loop=loop, middlewares=[
-        logger_factory, response_factory
+        logger_factory, auth_factory, response_factory
     ])
     init_jinja2(app, filters=dict(detetime=datetime_filter))
     add_routes(app, 'handlers')
