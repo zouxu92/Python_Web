@@ -86,8 +86,6 @@ def data_factory(app, handler):
         return (yield from handler(request))
     return parse_data
 
-
-
 # 响应处理
 # 总结下来一个请求在服务端收到后的方法调用顺序是:
 #     	logger_factory->response_factory->RequestHandler().__call__->get或post->handler
@@ -166,7 +164,6 @@ def datetime_filter(t):
     dt = datetime.fromtimestamp(t)
     return u'%s年%s月%s日' % (dt.year, dt.month, dt.day)
 
-
 @asyncio.coroutine
 def init(loop):
     yield from orm.create_pool(loop=loop, **configs.db)
@@ -179,9 +176,6 @@ def init(loop):
     srv = yield from loop.create_server(app.make_handler(), '127.0.0.1', 9000)
     logging.info('server started at http://127.0.0.1:9000...')
     return srv
-
-
-
 
 # 入口，固定写法
 # 获取eventloop然后加入运行事件
