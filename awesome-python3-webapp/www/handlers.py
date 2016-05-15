@@ -17,7 +17,7 @@ _COOKIE_KEY = configs.session.secret
 
 # 第11天添加的check_admin
 def check_admin(request):
-    if request.__user__ is None or not request.__user__.admin:
+    if request.__user__ is None or request.__user__.admin:  # 这里的省缺值默认为False,将这里的not去掉 12天
         raise APIPermissionError()
 
 # 第11天添加的get_page_index
@@ -151,6 +151,14 @@ def signout(request):
     logging.info('user signed out.')
     return r
 
+# 管理页面,第12天
+@get('/manage/blogs')
+def manage_blogs(*, page='1'):
+    return {
+        '__template__': 'manage_blogs.html',
+        'page_index': get_page_index(page)
+    }
+
 # 第11天提交代码
 @get('/manage/blogs/create')
 def manage_create_blog():
@@ -188,6 +196,19 @@ def api_register_user(*, email, name, passwd):
     r.content_type = 'application/json'
     r.body = json.dumps(user, ensure_ascii=False).encode('utf-8')
     return r
+
+
+# 第12天实现的查看博客
+@get('/api/blogs')
+def api_blogs(*, page='1'):
+    page_index =  get_page_index(page)
+    num = yield from Blog.findNumber('count(id)')
+    p = Page(num, page_index)
+    if num == 0:
+        return dict(page=p, blogs=())
+    blogs = yield from Blog.findAll(orderBy='created_at desc', limit=(p.offset, p.limit))
+    return dict(page=p, blogs=blogs)
+
 
 # 第11天代码
 @get('/api/blogs/{id}')
